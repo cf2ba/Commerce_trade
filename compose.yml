@@ -1,0 +1,47 @@
+name: ecommerce-customer-service
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ecommerce-cs-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-customer_service}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-customer_service}
+      POSTGRES_DB: ${POSTGRES_DB:-ecommerce}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ecommerce_cs_postgres:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:  
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-customer_service} -d ${POSTGRES_DB:-ecommerce}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: ecommerce-cs-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ecommerce_cs_redis:/data
+
+  app:
+    build: ./ecommerce-service
+    container_name: ecommerce-app
+    restart: always
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ECOM_DATABASE_URL: postgresql+psycopg://customer_service:customer_service@postgres:5432/ecommerce
+      JWT_SECRET: ${JWT_SECRET:-ecommerce-secret}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+
+volumes:
+  ecommerce_cs_postgres:
+  ecommerce_cs_redis:
